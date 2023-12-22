@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from decord import VideoReader, cpu, gpu
+from scipy.ndimage import gaussian_filter
 import cv2
 
 def contour_centers(contours, threshold):
@@ -88,7 +89,9 @@ def grab_markers(video, cam_to_img, distortion):
 
     return center_markers
 
-def find_median_contour(contours):
+def get_marker_size_px(contours):
+    # find the marker's width and height
+    # get the median contour of the last marker
     xlims = [np.min(contours[:,0]), np.max(contours[:,0])]
     ylims = [np.min(contours[:,1]), np.max(contours[:,1])]
     width = xlims[1]-xlims[0]+1
@@ -101,7 +104,6 @@ def find_median_contour(contours):
 
     # apply gaussian filter 
     sigma = 2
-    from scipy.ndimage import gaussian_filter
     h_image_smoothed = gaussian_filter(h_image.astype(float), sigma=sigma)
 
     # threshold the smoothed image to get a binary mask
@@ -113,8 +115,50 @@ def find_median_contour(contours):
     h_morpho = cv2.morphologyEx(binary_mask.astype(np.uint8), cv2.MORPH_CLOSE, kernel)
 
     # find median contour
-    median_contour, _ = cv2.findContours(binary_mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    median_contour = np.squeeze(np.concatenate(median_contour))
+    median_contour, _ = cv2.findContours(h_morpho.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    dot_x, dot_y = zip(*np.squeeze(np.concatenate(median_contour)))
+    dot_x = np.array(dot_x)
+    dot_y = np.array(dot_y)
 
+    # find the edges of the marker
+    nBin = 30
+    x_intervals = np.linspace(np.min(dot_x), np.max(dot_x), nBin)
+    points = [[dot_x[np.where((dot_x>=x_intervals[0])&(dot_x<x_intervals[1]))]], 
+              [dot_x[np.where((dot_x>x_intervals[-2])&(dot_x<=x_intervals[-1]))]]]
+    x_lims = [np.median(points[0]), np.median(points[1])]
 
+    y_intervals = np.linspace(np.min(dot_y), np.max(dot_y), nBin)
+    points = [[dot_y[np.where((dot_y>=y_intervals[0])&(dot_y<y_intervals[1]))]], 
+              [dot_y[np.where((dot_y>y_intervals[-2])&(dot_y<=y_intervals[-1]))]]]
+    y_lims = [np.median(points[0]), np.median(points[1])]
+
+    # calculate the marker size in pixel
+    marker_size_pixel = (int(x_lims[1]-x_lims[0]), int(y_lims[1]-y_lims[0]))
+    
+    return marker_size_pixel
+
+def px_to_dva(x_px, y_px, camera_matrix, distortion_coeffs, distorted):
+    
+    pixel_coords = np.array([x_px, y_px])
+
+    # First, we need to undistort the points
+    if not distorted:
+        undistorted_point = pixel_coords
+    else:
+        undistorted_point = cv2.undistortPoints(pixel_coords.reshape(1, 1, 2), camera_matrix, distortion_coeffs, P=camera_matrix)
+
+    # Convert to normalized homogeneous coordinates
+    norm_point = np.append(undistorted_point, 1)
+
+    # transform to camera coordinates
+    img_to_cam = np.linalg.inv(camera_matrix)
+    cam_coords = np.dot(img_to_cam, norm_point)
+
+    # Calculate elevation and azimuth based on the camera coordinates
+    elevation = np.rad2deg(np.arctan2(-cam_coords[1], cam_coords[2]))
+    azimuth = np.rad2deg(np.arctan2(cam_coords[0], cam_coords[2]))
+
+    dva = np.array([azimuth, elevation])
+
+    return dva
 
