@@ -89,38 +89,56 @@ def grab_markers(video, cam_to_img, distortion):
 
     return center_markers
 
-def get_marker_size_px(contours):
-    # find the marker's width and height
-    # get the median contour of the last marker
-    xlims = [np.min(contours[:,0]), np.max(contours[:,0])]
-    ylims = [np.min(contours[:,1]), np.max(contours[:,1])]
-    width = xlims[1]-xlims[0]+1
-    height = ylims[1]-ylims[0]+1
+def get_median_contour(contour_list, threshold):
+    #### the code below is written by Hyong-Kyu Song ####
+    contours = np.squeeze(np.concatenate(contour_list))
+    _, x_max = np.min(contours[:,0]), np.max(contours[:,0])
+    _, y_max = np.min(contours[:,1]), np.max(contours[:,1])
+    
+    # create an image that marks the contour
+    # plt.figure(figsize=(10, 6))   # uncomment this line if you want to see the image of overlapped contours
+    aggregate_image = np.zeros((y_max + 1, x_max + 1))
+    
+    for end_marker in contour_list:
+        coordinates = end_marker.squeeze(1)
+        
+        # Apply aggregation on plot
+        x, y = zip(*coordinates)
+        # plt.fill(x, y, color='skyblue', alpha=0.02)  # Filling the shape with a color
+        
+        # Apply aggregation on array itself
+        temp_image = np.zeros((y_max + 1, x_max + 1))
+        cv2.fillPoly(temp_image, pts=[coordinates], color=(1))
+        aggregate_image += temp_image
+    
+    # Get a binary mask from aggregated array
+    mask = aggregate_image >= max(1, int(92 * threshold))
+    mask = (mask * 255).astype(np.uint8)
+    print(f"Binary mask info: {mask.shape}, {mask.dtype}, {np.unique(mask)}")
 
-    # create a heatmap-like image
-    h_image = np.zeros((height, width), dtype=np.uint8)
-    for x, y in contours:
-        h_image[y-ylims[0], x-xlims[0]] += 1
+    # if threshold is too high, lower the threshold
+    while len(np.unique(mask)) == 1:
+        threshold = threshold - 0.05
+        mask = aggregate_image >= max(1, int(92 * threshold))
+        mask = (mask * 255).astype(np.uint8)
+        print(f"Binary mask info: {mask.shape}, {mask.dtype}, {np.unique(mask)}")
+    
+    # Find contour (coordinates) from the binary mask
+    median_contour, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    # Reshape the median contour
+    assert len(median_contour) == 1  # Must be single polygon per video
+    median_contour: np.ndarray = median_contour[0]
+    median_contour = median_contour.squeeze(1)
+    assert median_contour.ndim == 2  # [Coordinate #, 2]
+    print(f"median_contours.shape: {median_contour.shape}")
+    
+    return median_contour
 
-    # apply gaussian filter 
-    sigma = 2
-    h_image_smoothed = gaussian_filter(h_image.astype(float), sigma=sigma)
-
-    # threshold the smoothed image to get a binary mask
-    binary_mask = h_image_smoothed > 0.6
-
-    # apply morphological closing to enhance connected regions
-    kernel_size = 10
-    kernel = np.ones((kernel_size, kernel_size), np.uint8)
-    h_morpho = cv2.morphologyEx(binary_mask.astype(np.uint8), cv2.MORPH_CLOSE, kernel)
-
-    # find median contour
-    median_contour, _ = cv2.findContours(h_morpho.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    dot_x, dot_y = zip(*np.squeeze(np.concatenate(median_contour)))
-    dot_x = np.array(dot_x)
-    dot_y = np.array(dot_y)
-
-    # find the edges of the marker
+def get_marker_size_px(contour):
+    # get marker's width and height by taking median of the dots at extreme
+    dot_x, dot_y = zip(*contour)
+    dot_x, dot_y = np.array(dot_x), np.array(dot_y)
     nBin = 30
     x_intervals = np.linspace(np.min(dot_x), np.max(dot_x), nBin)
     points = [[dot_x[np.where((dot_x>=x_intervals[0])&(dot_x<x_intervals[1]))]], 
@@ -132,9 +150,8 @@ def get_marker_size_px(contours):
               [dot_y[np.where((dot_y>y_intervals[-2])&(dot_y<=y_intervals[-1]))]]]
     y_lims = [np.median(points[0]), np.median(points[1])]
 
-    # calculate the marker size in pixel
-    marker_size_pixel = (int(x_lims[1]-x_lims[0]), int(y_lims[1]-y_lims[0]))
-    
+    marker_size_pixel = [x_lims[1]-x_lims[0], y_lims[1]-y_lims[0]]
+
     return marker_size_pixel
 
 def px_to_dva(x_px, y_px, camera_matrix, distortion_coeffs, distorted):

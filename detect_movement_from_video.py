@@ -5,7 +5,7 @@ import math
 import matplotlib.pyplot as plt
 from decord import VideoReader, cpu, gpu 
 import cv2
-from camera_related_processes import grab_markers, get_marker_size_px, px_to_dva
+from camera_related_processes import grab_markers, get_median_contour, get_marker_size_px, px_to_dva
 
 # load the data sheet if it is already existing
 folder_list = glob.glob('/Users/jyeon/Documents/GitHub/pupillabs_imu/data/2023*')
@@ -19,7 +19,8 @@ if os.path.exists(data_sheet):
     folder_list = filtered_folder_list
 else:
     rotated_angle = pd.DataFrame(columns = ['folder name', 'distance_markers (cm)', 'distance_wall_measured (cm)', 
-                                        'distance_wall_computed (cm)', 'direction', 'session', 'rotated (deg)'])
+                                        'distance_wall_computed (cm)', 'direction', 'session', 
+                                        'start frame', 'end frame', 'rotated (deg)'])
     
 # for all folders, compute the angle the eyetracker rotated based on the video 
 for f in range(len(folder_list)):
@@ -60,11 +61,17 @@ for f in range(len(folder_list)):
     start_frame_id = center_markers['frame'].iloc[np.where(difference>=3)[0][0]]
     end_frame_id = center_markers['frame'].iloc[np.where(difference>=3)[0][-1]]
     
-    # get the final marker's median contour to convert pixel to cm 
-    end_marker_contour = np.squeeze(np.concatenate(center_markers[center_markers['frame']>end_frame_id]['marker'].to_list()))
-    marker_size_pixel = get_marker_size_px(end_marker_contour)
+    # get the final marker's median contour 
+    end_marker_list = center_markers[center_markers['frame']>end_frame_id]['marker'].to_list()
+    threshold = 0.6
+    contour = get_median_contour(end_marker_list, threshold)
+    
+    # convert marker size to pixels
     marker_size_cm = (7, 6) # in cm, width and height
     
+    # get marker size in pixels (width, height)
+    marker_size_pixel = get_marker_size_px(contour)
+
     # calculate the distance of the camera from the wall
     fx, fy = cam_to_img[0,0], cam_to_img[1,1]
     dx, dy = fx*(marker_size_cm[0]/marker_size_pixel[0]), fy*(marker_size_cm[1]/marker_size_pixel[1])
@@ -91,6 +98,8 @@ for f in range(len(folder_list)):
         'distance_wall_computed (cm)': dist_cam_to_wall, 
         'direction': [direction], 
         'session': session, 
+        'start frame': start_frame_id,
+        'end frame': end_frame_id,
         'rotated (deg)': angle_rotated
     })
 
