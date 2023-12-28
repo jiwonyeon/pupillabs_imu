@@ -23,6 +23,15 @@ for direction in directions:
     # filter the datalist
     short_list = rotated_angle.loc[rotated_angle['direction'] == direction]
     dist_params = short_list[['distance_wall_measured (cm)', 'distance_markers (cm)']].drop_duplicates().to_numpy()
+    
+    # sort the order from closest to farthest
+    sort_index = np.lexsort((dist_params[:, 1], dist_params[:, 0]))
+    dist_params = dist_params[sort_index,:]
+
+    # set number of rows and columns for the figure
+    n_col = 2
+    n_row = np.ceil(dist_params/2)
+    fig_num = 0
 
     for dist_wall, dist_markers in dist_params:
         # find the folders that corresponds to the parameters
@@ -30,13 +39,13 @@ for direction in directions:
                                  (short_list['distance_markers (cm)']==dist_markers)]
 
         # create an empty variables to save imu_changes
-        X_gyro, Y_gyro, Z_gyro = np.array([]), np.array([]), np.array([])
-        Pitch, Yaw, Roll = np.array([]), np.array([]), np.array([])
-        fig_gyro, ax1 = plt.subplots()
-        fig_euler, ax2 = plt.subplots()
+        X_gyro, Y_gyro, Z_gyro = np.zeros((0,500)), np.zeros((0,500)), np.zeros((0,500))
+        Pitch, Yaw, Roll = np.zeros((0,500)), np.zeros((0,500)), np.zeros((0,500))
+        fig_gyro, ax1 = plt.subplots(n_row, n_col, figsize = (8,4))
+        fig_euler, ax2 = plt.subplots(n_row, n_col, figsize = (8,4))
 
-        ax1.set_title(f'Cumulative Gyroscope ({direction}) \ncamera dist: {dist_wall}, marker dist: {dist_markers}')
-        ax2.set_title(f'Euler Angles ({direction}) \ncamera dist: {dist_wall}, marker dist: {dist_markers}')
+        ax1[fig_num].set_title(f'camera dist: {dist_wall}, marker dist: {dist_markers}')
+        ax2[fig_num].set_title(f'camera dist: {dist_wall}, marker dist: {dist_markers}')
         
         for id, folder in enumerate(list_same_condition['folder name']):
             # retrieve the IMU data
@@ -64,39 +73,46 @@ for direction in directions:
             # keep the number of samples to 500 
             gyro = np.empty((3, 500))
             euler = np.empty((3, 500))
+            new_times = np.linspace(times[0], times[-1], 500)
             if len(imu) != 500:
                 for axis_id in range(3):
-                    gyro[axis_id,:] = resample(gyro_vals[axis_id,:], 500)
-                    euler[axis_id,:] = resample(euler_vals[axis_id,:], 500)
+                    gyro[axis_id,:] = np.interp(new_times, times, gyro_vals[axis_id,:])
+                    euler[axis_id,:] = np.interp(new_times, times, euler_vals[axis_id,:])
             
             # save each trial's result and plot it
-            X_gyro, Z_gyro, Y_gyro = np.append(X_gyro, gyro[0]), np.append(Z_gyro, gyro[1]), np.append(Y_gyro, gyro[2])
-            X_gyro, Z_gyro, Y_gyro = X_gyro.reshape(500, -1), Z_gyro.reshape(500, -1), Y_gyro.reshape(500, -1)
-            Pitch, Yaw, Roll = np.append(Pitch, euler[0]), np.append(Yaw, euler[1]), np.append(Roll, euler[2])
-            Pitch, Yaw, Roll = Pitch.reshape(500, -1), Yaw.reshape(500, -1), Roll.reshape(500, -1)
-
+            X_gyro, Z_gyro, Y_gyro = np.vstack((X_gyro, gyro[0,:])), np.vstack((Z_gyro, gyro[1,:])), np.vstack((Y_gyro, gyro[2,:]))
+            Pitch, Yaw, Roll = np.vstack((Pitch, euler[0,:])), np.vstack((Yaw, euler[1,:])), np.vstack((Roll, euler[2,:]))
+            
             # plot gyro
             times = np.linspace(0, 1, 500)
-            if axis_id in range(3):
-                ax1.plot(times, gyro[axis_id,:], color = colors[axis_id], linewidth = 1, alpha = 0.6)
-                ax2.plot(times, euler[axis_id,:], color = colors[axis_id], linewidth=1, alpha = 0.6)
+            for axis_id in range(3):
+                ax1[fig_num].plot(times, gyro[axis_id,:], color = colors[axis_id], linewidth = 1, alpha = 0.6)
+                ax2[fig_num].plot(times, euler[axis_id,:], color = colors[axis_id], linewidth=1, alpha = 0.6)
             
         # plot average track of the movement 
-        gyro_avg = [np.mean(X_gyro, axis=1), np.mean(Y_gyro, axis=1), np.mean(Z_gyro, axis=1)]
-        euler_avg = [np.mean(Pitch, axis=1), np.mean(Roll, axis=1), np.mean(Yaw, axis=1)]
-
+        gyro_avg = np.array([np.mean(X_gyro, axis=0), np.mean(Z_gyro, axis=0), np.mean(Y_gyro, axis=0)])
+        euler_avg = np.array([np.mean(Pitch, axis=0), np.mean(Yaw, axis=0), np.mean(Roll, axis=0)])
         for axis_id in range(3):
-            ax1.plot(times, gyro_avg[axis_id], color = colors[axis_id], linewidth = 1.5)
-            ax2.plot(times, euler_avg[axis_id], color = colors[axis_id], linewidth = 1.5)
+            ax1[fig_num].plot(times, gyro_avg[axis_id], color = colors[axis_id], linewidth = 1.5)
+            ax2[fig_num].plot(times, euler_avg[axis_id], color = colors[axis_id], linewidth = 1.5)
         
         # plot the computed angle traveled
         avg_computed_angle = list_same_condition['rotated (deg)'].mean()
         if direction in ('left', 'up'):
             avg_computed_angle = -avg_computed_angle
-        ax1.plot(times, np.tile(avg_computed_angle, len(times)), '-r', linewidth = 1.5)
-        ax2.plot(times, np.tile(avg_computed_angle, len(times)), '-r', linewidth = 1.5)
+        ax1[fig_num].plot(times, np.tile(avg_computed_angle, len(times)), '--r', linewidth = 1.5)
+        ax2[fig_num].plot(times, np.tile(avg_computed_angle, len(times)), '--r', linewidth = 1.5)
 
+        legend_elements = [plt.Line2D([0], [0], color=colors[0]),                            
+                            plt.Line2D([0], [0], color=colors[1]), 
+                            plt.Line2D([0], [0], color=colors[2]),
+                            plt.Line2D([0], [0], color='r', linestyle = '--', linewidth=1.5)]
+        
+        # add the legend 
+        legend_labels = ['Up/Down', 'Left/Right', 'Roll', 'Estimated rotated']
+        ax1[fig_num].legend(legend_elements, legend_labels, fontsize='x=small')
 
-            
-
-
+        legend_labels = ['Up/Down [Pitch]', 'Left/Right [Yaw]', 'Roll [Roll]', 
+                        'Estimated rotated']
+        ax2[fig_num].legend(legend_elements, legend_labels, fontsize='x-small')
+        
