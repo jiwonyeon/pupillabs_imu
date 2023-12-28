@@ -119,7 +119,7 @@ for direction in directions:
         ax1[row, col].set_xlim([0, 1])
         if col == 0:
             ax1[row, col].set_ylabel('Rotated [deg]')
-        if row == n_row:
+        if row+1 == n_row:
             ax1[row, col].set_xlabel('Normalized time')
         
         legend_labels = ['Up/Down [Pitch]', 'Left/Right [Yaw]', 'Roll [Roll]', 'Estimated rotated']
@@ -131,8 +131,8 @@ for direction in directions:
             ax2[row, col].set_xlabel('Normalized time')
 
         # add the title            
-        avg_offset_gyro = np.sort(np.max(np.abs(np.vstack([X_gyro, Y_gyro, Z_gyro])), axis=1))[-3:] - np.abs(avg_computed_angle)
-        avg_offset_euler = np.sort(np.max(np.abs(np.vstack([Pitch, Yaw, Roll])), axis=1))[-3:] - np.abs(avg_computed_angle)
+        avg_offset_gyro = np.sort(np.max(np.abs(np.vstack([X_gyro, Y_gyro, Z_gyro])), axis=1))[-len(list_same_condition):] - np.abs(avg_computed_angle)
+        avg_offset_euler = np.sort(np.max(np.abs(np.vstack([Pitch, Yaw, Roll])), axis=1))[-len(list_same_condition):] - np.abs(avg_computed_angle)
         ax1[row, col].set_title(f'camera dist: {dist_wall}, marker dist: {dist_markers}, \noffset: {np.round(np.mean(np.abs(avg_offset_gyro)),2)}', 
                                 fontsize=10)
         ax2[row, col].set_title(f'camera dist: {dist_wall}, marker dist: {dist_markers}, \noffset: {np.round(np.mean(np.abs(avg_offset_euler)),2)}', 
