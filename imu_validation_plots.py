@@ -46,7 +46,6 @@ for direction in directions:
         # create an empty variables to save imu_changes
         X_gyro, Y_gyro, Z_gyro = np.zeros((0,500)), np.zeros((0,500)), np.zeros((0,500))
         Pitch, Yaw, Roll = np.zeros((0,500)), np.zeros((0,500)), np.zeros((0,500))
-        
         for id, folder in enumerate(list_same_condition['folder name']):
             # retrieve the IMU data
             imu = pd.read_csv(os.path.join(data_path, folder, 'imu.csv'))
@@ -67,33 +66,41 @@ for direction in directions:
 
             # compute cumulative trapezoidal integration for gyro
             # x = up/down (pitch), y = roll (roll), z = left/right (yaw)
-            gyro_vals = np.squeeze(np.array([[cumtrapz(imu['gyro x [deg/s]'], times, initial=0)], 
-                         [cumtrapz(imu['gyro z [deg/s]'], times, initial=0)],
-                         [cumtrapz(imu['gyro y [deg/s]'], times, initial=0)]]))
-
+            gyro_vals = {
+                'x': cumtrapz(imu['gyro x [deg/s]'], times, initial=0),
+                'y': cumtrapz(imu['gyro y [deg/s]'], times, initial=0),
+                'z': cumtrapz(imu['gyro z [deg/s]'], times, initial=0)}
+            
             # match pitch, yaw, and roll to zeros in the beginning
-            euler_vals = np.squeeze(np.array([[imu['pitch [deg]'].to_numpy() - np.mean(imu['pitch [deg]'].iloc[:20])], 
-                          [imu['yaw [deg]'].to_numpy() - np.mean(imu['yaw [deg]'].iloc[:20])],
-                          [imu['roll [deg]'].to_numpy() - np.mean(imu['roll [deg]'].iloc[:20])]]))
+            euler_vals = {
+                'pitch': imu['pitch [deg]'].to_numpy() - np.mean(imu['pitch [deg]'].iloc[:20]),
+                'yaw': imu['yaw [deg]'].to_numpy() - np.mean(imu['yaw [deg]'].iloc[:20]),
+                'roll': imu['roll [deg]'].to_numpy() - np.mean(imu['roll [deg]'].iloc[:20])}
             
             # keep the number of samples to 500 
-            gyro = np.empty((3, 500))
-            euler = np.empty((3, 500))
             new_times = np.linspace(times[0], times[-1], 500)
-            if len(imu) != 500:
-                for axis_id in range(3):
-                    gyro[axis_id,:] = np.interp(new_times, times, gyro_vals[axis_id,:])
-                    euler[axis_id,:] = np.interp(new_times, times, euler_vals[axis_id,:])
+            gyro = {
+                'x': np.interp(new_times, times, gyro_vals['x']), 
+                'y': np.interp(new_times, times, gyro_vals['y']), 
+                'z': np.interp(new_times, times, gyro_vals['z'])}
+            
+            euler = {
+                'pitch': np.interp(new_times, times, euler_vals['pitch']), 
+                'yaw': np.interp(new_times, times, euler_vals['yaw']), 
+                'roll': np.interp(new_times, times, euler_vals['roll'])}
             
             # save each trial's result and plot it
-            X_gyro, Z_gyro, Y_gyro = np.vstack((X_gyro, gyro[0,:])), np.vstack((Z_gyro, gyro[1,:])), np.vstack((Y_gyro, gyro[2,:]))
-            Pitch, Yaw, Roll = np.vstack((Pitch, euler[0,:])), np.vstack((Yaw, euler[1,:])), np.vstack((Roll, euler[2,:]))
-            
+            X_gyro, Z_gyro, Y_gyro = np.vstack((X_gyro, gyro['x'])), np.vstack((Z_gyro, gyro['z'])), np.vstack((Y_gyro, gyro['z']))
+            Pitch, Yaw, Roll = np.vstack((Pitch, euler['pitch'])), np.vstack((Yaw, euler['yaw'])), np.vstack((Roll, euler['roll']))
+
             # plot gyro
             times = np.linspace(0, 1, 500)
-            for axis_id in range(3):
-                ax1[row, col].plot(times, gyro[axis_id,:], color = colors[axis_id], linewidth = 1, alpha = 0.6)
-                ax2[row, col].plot(times, euler[axis_id,:], color = colors[axis_id], linewidth=1, alpha = 0.6)
+            ax1[row, col].plot(times, gyro['x'], color = colors[0], linewidth = 1, alpha = 0.6)
+            ax1[row, col].plot(times, gyro['z'], color = colors[1], linewidth = 1, alpha = 0.6)
+            ax1[row, col].plot(times, gyro['y'], color = colors[2], linewidth = 1, alpha = 0.6)
+            ax2[row, col].plot(times, euler['pitch'], color = colors[0], linewidth=1, alpha = 0.6)
+            ax2[row, col].plot(times, euler['yaw'], color = colors[1], linewidth=1, alpha = 0.6)
+            ax2[row, col].plot(times, euler['roll'], color = colors[2], linewidth=1, alpha = 0.6)
             
         # plot average track of the movement 
         gyro_avg = np.array([np.mean(X_gyro, axis=0), np.mean(Z_gyro, axis=0), np.mean(Y_gyro, axis=0)])
@@ -144,6 +151,9 @@ for direction in directions:
             row += 1
         else:
             col += 1
+
+        if direction == 'right':
+            print('stop')
 
     # add supertitle
     fig_gyro.suptitle(f'{direction.capitalize()}')

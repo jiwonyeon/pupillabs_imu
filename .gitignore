@@ -4,3 +4,4 @@ __pycache__
 /imu data graphs_natasha
 /imu figures
 /imu figures_old
+*.csv
