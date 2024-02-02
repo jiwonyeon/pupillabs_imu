@@ -152,9 +152,6 @@ for direction in directions:
         else:
             col += 1
 
-        if direction == 'right':
-            print('stop')
-
     # add supertitle
     fig_gyro.suptitle(f'{direction.capitalize()}')
     fig_euler.suptitle(f'{direction.capitalize()}')
