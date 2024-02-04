@@ -72,10 +72,15 @@ for direction in directions:
                 'z': cumtrapz(imu['gyro z [deg/s]'], times, initial=0)}
             
             # match pitch, yaw, and roll to zeros in the beginning
+            # euler_vals = {
+            #     'pitch': imu['pitch [deg]'].to_numpy() - np.mean(imu['pitch [deg]'].iloc[:20]),
+            #     'yaw': imu['yaw [deg]'].to_numpy() - np.mean(imu['yaw [deg]'].iloc[:20]),
+            #     'roll': imu['roll [deg]'].to_numpy() - np.mean(imu['roll [deg]'].iloc[:20])}
+
             euler_vals = {
-                'pitch': imu['pitch [deg]'].to_numpy() - np.mean(imu['pitch [deg]'].iloc[:20]),
-                'yaw': imu['yaw [deg]'].to_numpy() - np.mean(imu['yaw [deg]'].iloc[:20]),
-                'roll': imu['roll [deg]'].to_numpy() - np.mean(imu['roll [deg]'].iloc[:20])}
+                'pitch': imu['pitch [deg]'].to_numpy() - imu['pitch [deg]'].iloc[0],
+                'yaw': imu['yaw [deg]'].to_numpy() - imu['yaw [deg]'].iloc[0],
+                'roll': imu['roll [deg]'].to_numpy() - imu['roll [deg]'].iloc[0]}
             
             # keep the number of samples to 500 
             new_times = np.linspace(times[0], times[-1], 500)
@@ -90,7 +95,7 @@ for direction in directions:
                 'roll': np.interp(new_times, times, euler_vals['roll'])}
             
             # save each trial's result and plot it
-            X_gyro, Z_gyro, Y_gyro = np.vstack((X_gyro, gyro['x'])), np.vstack((Z_gyro, gyro['z'])), np.vstack((Y_gyro, gyro['z']))
+            X_gyro, Z_gyro, Y_gyro = np.vstack((X_gyro, gyro['x'])), np.vstack((Z_gyro, gyro['z'])), np.vstack((Y_gyro, gyro['y']))
             Pitch, Yaw, Roll = np.vstack((Pitch, euler['pitch'])), np.vstack((Yaw, euler['yaw'])), np.vstack((Roll, euler['roll']))
 
             # plot gyro
