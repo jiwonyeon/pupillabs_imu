@@ -88,7 +88,14 @@ for f in range(len(folder_list)):
     dva_end = px_to_dva(end_marker_pos[0], end_marker_pos[1], cam_to_img, distortion, distorted = False)  
 
     # combine and get the final angle
-    angle_rotated = np.round(dva_start[0] + angle_btwn_markers - dva_end[0],2)
+    if direction=='left':
+        angle_rotated = np.round(dva_start[0] + angle_btwn_markers - dva_end[0],2)
+    elif direction=='right':
+        angle_rotated = np.round(-dva_start[0] + angle_btwn_markers + dva_end[0],2)
+    elif direction=='down':
+        angle_rotated = np.round(dva_start[1] + angle_btwn_markers - dva_end[1],2)
+    elif direction=='up':
+        angle_rotated = np.round(-dva_start[1] + angle_btwn_markers + dva_end[1],2)
     
     # save the information in the data sheet
     new_row = pd.DataFrame({
