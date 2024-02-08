@@ -6,14 +6,16 @@ import numpy as np
 import os, glob
 import matplotlib.pyplot as plt
 from scipy.integrate import cumtrapz
-from scipy.signal import resample
-from decord import VideoReader, cpu, gpu 
+# from scipy.signal import resample
+# from decord import VideoReader, cpu, gpu 
+from scipy.spatial.transform import Rotation as R
 import seaborn as sns
 
 # load the summary result
 rotated_angle = pd.read_csv('rotated_angle.csv')
 data_path = '/Users/jyeon/Documents/GitHub/pupillabs_imu/data'
 fig_path = './imu figures'
+ALIGN    = True
 
 # set colors 
 colors = sns.color_palette('Set2')
@@ -64,12 +66,30 @@ for direction in directions:
             times = imu['timestamp [ns]'].to_numpy()/1e9
             times = times-times[0]
 
-            # compute cumulative trapezoidal integration for gyro
-            # x = up/down (pitch), y = roll (roll), z = left/right (yaw)
-            gyro_vals = {
-                'x': cumtrapz(imu['gyro x [deg/s]'], times, initial=0),
-                'y': cumtrapz(imu['gyro y [deg/s]'], times, initial=0),
-                'z': cumtrapz(imu['gyro z [deg/s]'], times, initial=0)}
+            if ALIGN:
+                # rotate gyro data to align with the world coordinate
+                ## pull quaternion data from imu dataframe
+                _quat = imu[['quaternion x', 'quaternion y', 'quaternion z', 'quaternion w']].to_numpy()
+
+                ## pull gyroscope data from imu dataframe
+                _gyro = imu[['gyro x [deg/s]', 'gyro y [deg/s]', 'gyro z [deg/s]']].to_numpy()
+
+                ## rotate gyro data based on quaternion
+                _gyro = R.from_quat(_quat).apply(_gyro)
+
+                # compute cumulative trapezoidal integration for gyro
+                # x = up/down (pitch), y = roll (roll), z = left/right (yaw)
+                gyro_vals = {
+                    'x': cumtrapz(_gyro[:,0], times, initial=0),
+                    'y': cumtrapz(_gyro[:,1], times, initial=0),
+                    'z': cumtrapz(_gyro[:,2], times, initial=0)}
+                
+            else:
+                # original code without aligning the gyro data
+                gyro_vals = {
+                    'x': cumtrapz(imu['gyro x [deg/s]'], times, initial=0),
+                    'y': cumtrapz(imu['gyro y [deg/s]'], times, initial=0),
+                    'z': cumtrapz(imu['gyro z [deg/s]'], times, initial=0)}
             
             # match pitch, yaw, and roll to zeros in the beginning
             # euler_vals = {
